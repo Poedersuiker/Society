@@ -6,9 +6,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import datetime
 import re # For input validation
 from flask_socketio import SocketIO, emit, disconnect
-from app.moderator_ai import ModeratorAI
-from app.ai_member_agent import AIMemberAgent
-import app.database as db 
+from app.moderator_ai import ModeratorAI # Absolute import
+from app.ai_member_agent import AIMemberAgent # Absolute import
+import app.database as db # Absolute import
 import sqlite3 # For catching database errors
 
 app = Flask(__name__)
@@ -207,8 +207,13 @@ def handle_send_chat_message(data):
             socketio.emit('new_message', emitted_message, broadcast=True)
             # print(f"Message from {sender} to {recipient} saved and emitted.")
 
-            moderator.process_message(emitted_message)
+            # Moderator processing
+            warning_message = moderator.process_message(emitted_message)
+            if warning_message:
+                socketio.emit('new_message', warning_message, broadcast=True)
+                print(f"Moderator warning emitted: {warning_message}")
             
+            # AI Member processing
             all_current_messages = db.get_all_messages() 
             for agent in ai_agents:
                 if emitted_message['recipient_username'] == 'general' or emitted_message['recipient_username'] == agent.username:
@@ -217,7 +222,11 @@ def handle_send_chat_message(data):
                         response_recipient = "general"
                         if emitted_message['recipient_username'] == agent.username:
                             response_recipient = sender
-                        agent.send_message(response_recipient, response_text)
+                        
+                        ai_message_dict = agent.send_message(response_recipient, response_text)
+                        if ai_message_dict:
+                            socketio.emit('new_message', ai_message_dict, broadcast=True)
+                            print(f"AI Agent {agent.username} message emitted: {ai_message_dict}")
         else:
             # This case might be rare if db.add_message itself raises exceptions for failures
             print(f"Failed to save message from {sender} to {recipient} (db.add_message returned False).")
@@ -239,24 +248,25 @@ def send_initial_moderator_message_if_needed():
             "These must be established through discussion and agreement. "
             "All messages are public in 'General Assembly' unless sent as a 'Private Message' to a specific user."
         )
-        # Moderator's send_message method will use db.add_message and socketio.emit
-        moderator.send_message("general", welcome_text) # Removed messages_file arg
-        print("ModeratorAI: Initial welcome message sent using DB.")
+        # Moderator's send_message method now returns the message dictionary
+        initial_mod_message = moderator.send_message("general", welcome_text)
+        if initial_mod_message and socketio: # Check if socketio is available (it should be at this point)
+             socketio.emit('new_message', initial_mod_message, broadcast=True)
+        print("ModeratorAI: Initial welcome message processed.")
 
 
 if __name__ == '__main__':
-    db.init_db() # Initialize database
+    db.init_db() 
 
-    # Ensure AI agents and moderator have socketio and db instances correctly set
-    # This is important if they were initialized before main block or if app is structured differently
-    if moderator.socketio is None: moderator.socketio = socketio
-    if moderator.db is None: moderator.db = db # Ensure db module is passed
+    # Ensure AI agents and moderator have socketio and db instances correctly set.
+    # This is mainly for safety if classes are instantiated before socketio/db are globally defined.
+    # However, with current structure, they are passed during instantiation.
+    if moderator.socketio is None: moderator.socketio = socketio # Should already be set
+    if moderator.db is None: moderator.db = db 
     
-    for agent in ai_agents:
-        if agent.socketio is None: agent.socketio = socketio
-        if agent.db is None: agent.db = db # Ensure db module is passed to each agent
-
-    initialize_ai_agents() # AI agents are initialized here, now with db module passed
+    # AI agents are initialized in initialize_ai_agents(), which is called after socketio/db are ready.
+    # So, explicit re-setting here might be redundant if initialize_ai_agents() is called correctly.
+    initialize_ai_agents() 
     send_initial_moderator_message_if_needed()
 
     print("Starting Flask-SocketIO server...")

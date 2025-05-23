@@ -32,27 +32,33 @@ class ModeratorAI:
                 "timestamp": timestamp_str
             }
 
-            if self.socketio:
-                self.socketio.emit('new_message', emitted_message, broadcast=True)
-                print(f"ModeratorAI: Message emitted via SocketIO to {recipient}: '{text}'")
-            else:
-                print("ModeratorAI: SocketIO instance not available. Message not emitted.")
+            # No longer directly emits; returns the message dict for the caller to handle emission
+            # if self.socketio:
+            #     self.socketio.emit('new_message', emitted_message) 
+            #     print(f"ModeratorAI: Message emitted via SocketIO to {recipient}: '{text}' (intended for all)")
+            # else:
+            #     print("ModeratorAI: SocketIO instance not available. Message not emitted.")
+            return emitted_message # Return the message dictionary
         else:
             print(f"ModeratorAI: Failed to save message from {self.ai_username} to {recipient} to DB.")
+            return None # Return None if saving failed
 
 
     def process_message(self, message_dict):
-        """Analyzes a message for offensive content and reacts."""
-        # Fields from message_dict should now align with DB column names (sender_username, recipient_username)
+        """
+        Analyzes a message for offensive content. 
+        If a warning is generated, it's saved via send_message and returned.
+        Returns the warning message dictionary or None.
+        """
         sender = message_dict.get('sender_username') 
         text_content = message_dict.get('text', '').lower()
-        recipient = message_dict.get('recipient_username')
+        # recipient = message_dict.get('recipient_username') # Not used for warning logic itself
 
         # Don't moderate own messages or messages from other AI agents
         if sender == self.ai_username or (sender and sender.startswith("AI_")):
-            return
+            return None
 
-        print(f"ModeratorAI: Processing message from {sender} to {recipient}: '{message_dict.get('text')}'")
+        # print(f"ModeratorAI: Processing message from {sender} to {recipient}: '{message_dict.get('text')}'") # Debugging
 
         found_offensive_keyword = None
         for keyword in self.offensive_keywords:
@@ -65,10 +71,13 @@ class ModeratorAI:
                 f"ModeratorBot: @{sender}, your recent message contains inappropriate language (e.g., related to '{found_offensive_keyword}'). "
                 "Please maintain a respectful environment and avoid using offensive terms."
             )
-            # Send warning to general chat, regardless of original message's recipient for public visibility of moderation
-            self.send_message("general", warning_text)
-            print(f"ModeratorAI: Offensive keyword '{found_offensive_keyword}' detected from {sender}. Warning sent.")
-        # Future: Implement other rules like "staying on topic" here.
+            # Send warning to general chat and get the message dict back
+            warning_message_dict = self.send_message("general", warning_text)
+            if warning_message_dict:
+                print(f"ModeratorAI: Offensive keyword '{found_offensive_keyword}' detected from {sender}. Warning generated and saved.")
+                return warning_message_dict # Return the saved warning message
+        
+        return None # No warning generated
 
     # Removed _load_messages and _save_messages as they are no longer needed
 
