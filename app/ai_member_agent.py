@@ -2,120 +2,114 @@ import json
 import datetime
 import os
 import random
+import google.generativeai as genai # Added for Gemini
+import re # For potential use in cleaning responses, though not explicitly in prompt
+
 # No longer need to import json or os if not using JSON files directly
 
 class AIMemberAgent:
-    def __init__(self, username, political_view, persona=None, socketio_instance=None, db_module=None):
+    def __init__(self, username, political_view, persona, db_module, api_key=None, socketio_instance=None): # Added api_key
         self.username = username
         self.political_view = political_view
-        self.persona = persona if persona else "A political representative."
+        self.persona = persona # Persona is now expected to be provided
         self.socketio = socketio_instance
-        self.db = db_module # Store the database module instance
-        
-        self.base_speak_probability = 0.1  # Lower base probability
-        self.triggered_speak_probability = 0.6 # Higher probability if triggered by keyword
-        
-        self.common_stopwords = set([
-            "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", 
-            "any", "are", "aren't", "as", "at", "be", "because", "been", "before", "being", 
-            "below", "between", "both", "but", "by", "can't", "cannot", "could", "couldn't", 
-            "did", "didn't", "do", "does", "doesn't", "doing", "don't", "down", "during", 
-            "each", "few", "for", "from", "further", "had", "hadn't", "has", "hasn't", 
-            "have", "haven't", "having", "he", "he'd", "he'll", "he's", "her", "here", 
-            "here's", "hers", "herself", "him", "himself", "his", "how", "how's", "i", 
-            "i'd", "i'll", "i'm", "i've", "if", "in", "into", "is", "isn't", "it", "it's", 
-            "its", "itself", "let's", "me", "more", "most", "mustn't", "my", "myself", 
-            "no", "nor", "not", "of", "off", "on", "once", "only", "or", "other", "ought", 
-            "our", "ours", "ourselves", "out", "over", "own", "same", "shan't", "she", 
-            "she'd", "she'll", "she's", "should", "shouldn't", "so", "some", "such", 
-            "than", "that", "that's", "the", "their", "theirs", "them", "themselves", 
-            "then", "there", "there's", "these", "they", "they'd", "they'll", "they're", 
-            "they've", "this", "those", "through", "to", "too", "under", "until", "up", 
-            "very", "was", "wasn't", "we", "we'd", "we'll", "we're", "we've", "were", 
-            "weren't", "what", "what's", "when", "when's", "where", "where's", "which", 
-            "while", "who", "who's", "whom", "why", "why's", "with", "won't", "would", 
-            "wouldn't", "you", "you'd", "you'll", "you're", "you've", "your", "yours", 
-            "yourself", "yourselves"
-        ])
-        self.interest_keywords = self._extract_interest_keywords()
+        self.db = db_module 
+        self.api_key = api_key
+        self.model = None
 
+        # Removed old keyword logic and speak probabilities as Gemini will handle response generation.
+        # self.base_speak_probability = 0.1 
+        # self.triggered_speak_probability = 0.6
+        # self.common_stopwords = set([...]) # No longer needed for this agent's core logic
+        # self.interest_keywords = self._extract_interest_keywords() # No longer needed
 
-    def _extract_interest_keywords(self):
-        # Extract significant words from political_view and persona
-        raw_keywords = (self.political_view + " " + self.persona).lower().replace('.', '').replace(',', '').split()
-        
-        # More refined list of stopwords specific to political discourse or common in descriptions
-        # self.common_stopwords is already defined, so we can use it directly.
-        discourse_stopwords = {
-            "advocates", "focuses", "prioritizes", "government", "policy", "impact", "issues",
-            "social", "strong", "reduced", "market", "values", "protection", "often", "general",
-            "stance", "describing", "their", "related", "consider", "think", "should", "believe",
-            "perspective", "approach", "system", "development", "economic", "national", "public",
-            "support", "rights", "freedom", "justice", "equality", "community", "growth", "well-being"
-        }
-        # The original self.common_stopwords was a small set. The new one is comprehensive.
-        # We'll use the comprehensive one and add discourse_stopwords to it for this method's purpose.
-        combined_stopwords = self.common_stopwords.union(discourse_stopwords)
+        if self.api_key:
+            # Ensure genai is configured.
+            try:
+                # Attempt to get a model to see if API key is already configured and valid.
+                # This is a simple check; a more robust one might involve listing models.
+                genai.get_model('gemini-pro') 
+            except Exception: # Broad exception if not configured or key is invalid
+                try:
+                    print(f"AIMemberAgent ({self.username}): Attempting to configure Gemini.")
+                    genai.configure(api_key=self.api_key)
+                except Exception as e:
+                    print(f"AIMemberAgent ({self.username}): Error configuring Gemini with API key: {e}")
+                    self.api_key = None # Nullify API key if configuration fails
 
-        # Keep words longer than 3 characters and not in combined_stopwords
-        interest_keywords = [word for word in raw_keywords if len(word) > 3 and word not in combined_stopwords]
-        return list(set(interest_keywords))
+            if self.api_key: # Re-check API key status after potential configuration attempt
+                try:
+                    self.model = genai.GenerativeModel('gemini-pro')
+                    print(f"AIMemberAgent ({self.username}): Gemini model initialized successfully.")
+                except Exception as e:
+                    print(f"AIMemberAgent ({self.username}): Error initializing Gemini model: {e}")
+                    self.model = None
+        else:
+            print(f"AIMemberAgent ({self.username}): No API key provided. AI responses will be disabled for this agent.")
 
-    def _extract_message_keywords(self, message_text):
-        words = message_text.lower().replace('.', '').replace(',', '').split()
-        # Use the comprehensive self.common_stopwords here as well.
-        return [word for word in words if word not in self.common_stopwords and len(word) > 3]
+    # Removed _extract_interest_keywords and _extract_message_keywords as they are part of the old logic
 
     def generate_response(self, all_messages):
-        if not all_messages:
+        if not self.model: # If Gemini model is not available, agent does not respond
+            print(f"AIMemberAgent ({self.username}): No model available, cannot generate response.")
             return None
 
-        last_message = all_messages[-1]
-        # In generate_response, last_message structure will depend on how it's passed.
-        # Assuming it's a dict from db.get_all_messages() which now aligns with db columns.
-        last_message_sender = last_message.get('sender_username', '')
-        last_message_text = last_message.get('text', '')
+        history_limit = 5
+        # Filter out messages from this agent itself and also ModeratorBot from history to Gemini
+        recent_messages = [
+            msg for msg in all_messages 
+            if msg['sender_username'] != self.username and msg['sender_username'] != "ModeratorBot"
+        ][-history_limit:]
+        
+        formatted_chat_history = "\n".join([f"{msg['sender_username']}: {msg['text']}" for msg in recent_messages])
+        if not recent_messages: # Check if list is empty
+            formatted_chat_history = "No recent messages relevant for you to respond to. You can make an opening statement if relevant to your views, or introduce a new topic according to your political agenda."
 
-        # Do not respond to self, ModeratorBot, or other AI agents
-        if last_message_sender == self.username or \
-           last_message_sender == "ModeratorBot" or \
-           (last_message_sender and last_message_sender.startswith("AI_")): # Added check for None
+        prompt = f'''You are an AI Member of a parliamentary assembly simulation.
+Your Name: {self.username}
+Your Political View: {self.political_view}
+Your Persona: {self.persona}
+
+Recent chat history (last few messages):
+{formatted_chat_history}
+
+Considering your role, political views, persona, and the ongoing discussion:
+Generate a single, concise, and directly speakable chat message (around 20-50 words) to contribute to the parliamentary debate.
+Your message should be in plain text, without any markdown or prefixes like your name.
+If the current discussion is not relevant to your mandate, if you have no substantive contribution, or if another member is clearly being addressed, respond with only the word "PASS".'''
+        
+        try:
+            # print(f"AIMemberAgent ({self.username}) Prompt: {prompt[:300]}...") # For debugging
+            response = self.model.generate_content(prompt)
+            
+            if response and response.parts:
+                generated_text = "".join(part.text for part in response.parts).strip()
+            elif response and hasattr(response, 'text') and response.text: # Fallback for simpler text responses
+                 generated_text = response.text.strip()
+            else: # No valid response content
+                print(f"AIMemberAgent ({self.username}): Gemini response had no valid parts or text.")
+                generated_text = "PASS"
+                
+        except Exception as e:
+            print(f"AIMemberAgent ({self.username}): Error calling Gemini API: {e}")
+            return None # Return None on API error
+
+        if generated_text.upper() == "PASS" or not generated_text:
+            # print(f"AIMemberAgent ({self.username}): Decided to PASS or generated empty response.")
             return None
+        
+        # Basic filter for self-mentioning if Gemini doesn't obey the prompt
+        # This could be made more robust with regex if needed
+        generated_text = generated_text.replace(f"{self.username}:", "").replace(f"{self.username} says:", "").strip()
+        
+        # Further ensure conciseness (though prompt asks for max 50 words)
+        # This is a soft limit, actual enforcement might need token counting or stricter post-processing.
+        # For now, let's assume the model tries to adhere to the word count.
+        
+        return generated_text
 
-        message_keywords = self._extract_message_keywords(last_message_text)
-        matched_keywords = [kw for kw in self.interest_keywords if kw in message_keywords]
-
-        current_speak_probability = self.base_speak_probability
-        if matched_keywords:
-            current_speak_probability = self.triggered_speak_probability
-            print(f"Agent {self.username} triggered by keywords: {matched_keywords} in message: '{last_message_text}'")
-
-
-        if random.random() < current_speak_probability:
-            topic_keyword = random.choice(matched_keywords) if matched_keywords else random.choice(self.interest_keywords) if self.interest_keywords else "the current topic"
-            
-            # Simple way to get a snippet of the political view for responses
-            view_snippet_words = [w for w in self.political_view.lower().split() if w not in self.common_stopwords and len(w) > 4]
-            view_snippet = " ".join(random.sample(view_snippet_words, min(len(view_snippet_words), 3))) if view_snippet_words else "our core principles"
-
-
-            response_templates = [
-                f"Regarding '{topic_keyword}', my perspective is that we should focus on {view_snippet}.",
-                f"The recent point about '{topic_keyword}' aligns with my view on {random.choice(self.interest_keywords) if self.interest_keywords else view_snippet}.",
-                f"I'd like to add that {self.persona.split('.')[0]}, especially concerning '{topic_keyword}'.",
-                f"Considering '{topic_keyword}', it's crucial to remember our commitment to {view_snippet}.",
-                f"This discussion on '{topic_keyword}' directly relates to {random.choice(self.interest_keywords) if self.interest_keywords else 'our broader agenda'}. We must ensure {view_snippet}."
-            ]
-            
-            if not self.interest_keywords and not matched_keywords: # Fallback if no keywords at all
-                 return f"I am reflecting on the discussion. {self.persona.split('.')[0]}."
-
-            return random.choice(response_templates)
-            
-        return None
-
-    def send_message(self, recipient, text): # Removed messages_file argument
-        """Allows the AI member to send messages to the chat, save to DB, and emit via SocketIO."""
+    def send_message(self, recipient, text): 
+        """Saves AI message to DB and returns message dictionary for emission."""
         if not self.db:
             print(f"AIMemberAgent ({self.username}) Error: Database module not configured.")
             return

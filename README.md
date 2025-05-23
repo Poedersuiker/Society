@@ -79,7 +79,33 @@ This is a simple web-based chat application built with Flask.
     ```bash
     python -m app.app
     ```
-    This method runs the application as a Python module and correctly handles the package structure, preventing import errors. The application will typically be available at `http://127.0.0.1:5000/` in your web browser.
+    This method runs the application as a Python module and correctly handles the package structure, preventing import errors. 
+    By default, the server is configured to listen on `192.168.0.10:5000`. If your machine's IP address on the local network is `192.168.0.10`, the application will be accessible at `http://192.168.0.10:5000/` from other devices on the same network. If running locally and not accessing from other devices, or if your IP is different, you might access it via `http://127.0.0.1:5000/` or `http://localhost:5000/` if the host configuration is changed to `0.0.0.0` or `127.0.0.1`.
+
+## AI Features and API Key Setup
+
+This application uses the Google Gemini API to power its advanced AI features, including:
+- Content moderation by the `ModeratorAI`.
+- Contextual response generation by `AIMemberAgent`s.
+
+To enable these AI features, you need to:
+
+1.  **Obtain a Google Gemini API Key:**
+    You can get an API key from Google AI Studio by visiting [https://makersuite.google.com/app/apikey](https://makersuite.google.com/app/apikey).
+
+2.  **Set up the Environment Variable:**
+    The application expects the API key to be available as an environment variable named `GOOGLE_API_KEY`.
+    The recommended way to set this is by creating a file named `.env` in the root directory of the project (`Society/`).
+
+3.  **Create the `.env` file:**
+    Add the following line to your `.env` file, replacing `"YOUR_ACTUAL_API_KEY_HERE"` with your actual API key:
+    ```env
+    GOOGLE_API_KEY="YOUR_ACTUAL_API_KEY_HERE"
+    ```
+
+**Important:**
+- The `.env` file is included in `.gitignore` and should **not** be committed to your version control system.
+- If the `GOOGLE_API_KEY` is not provided or is invalid, the AI-powered features will be disabled, and the application will fall back to simpler, non-AI behaviors where applicable (e.g., keyword-based moderation for `ModeratorAI`, and `AIMemberAgent`s will not generate responses).
 
 
 ## Running Tests

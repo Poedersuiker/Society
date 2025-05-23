@@ -6,10 +6,18 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import datetime
 import re # For input validation
 from flask_socketio import SocketIO, emit, disconnect
-from app.moderator_ai import ModeratorAI # Absolute import
-from app.ai_member_agent import AIMemberAgent # Absolute import
-import app.database as db # Absolute import
-import sqlite3 # For catching database errors
+from dotenv import load_dotenv # Added for Gemini API Key
+from app.moderator_ai import ModeratorAI 
+from app.ai_member_agent import AIMemberAgent 
+import app.database as db 
+import sqlite3 
+
+# Load environment variables from .env file
+load_dotenv()
+GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+if not GEMINI_API_KEY:
+    print("Warning: GOOGLE_API_KEY environment variable not found. AI moderation functionality will be limited to keyword fallback.")
 
 app = Flask(__name__)
 app.config['TESTING'] = True
@@ -19,10 +27,10 @@ app.config['SECRET_KEY'] = os.urandom(24)
 socketio = SocketIO(app, async_mode='eventlet')
 
 # Initialize Moderator AI
-# Pass socketio instance, and database module for message saving
-moderator = ModeratorAI(socketio_instance=socketio, db_module=db)
+# Pass db_module, api_key, and socketio_instance
+moderator = ModeratorAI(db_module=db, api_key=GEMINI_API_KEY, socketio_instance=socketio)
 
-# AI Member Definitions (still from JSON for this iteration, but they will use DB for sending messages)
+# AI Member Definitions (still from JSON)
 AI_MEMBERS_FILE = 'data/ai_members.json'
 ai_agents = [] # Global list to hold AI agent instances
 
@@ -270,4 +278,8 @@ if __name__ == '__main__':
     send_initial_moderator_message_if_needed()
 
     print("Starting Flask-SocketIO server...")
-    socketio.run(app, debug=True, use_reloader=False)
+    # Listen on all available interfaces on port 5000 by default
+    # For specific IP, use host='192.168.0.10' or similar.
+    # Using '0.0.0.0' makes it accessible on all network interfaces of the host machine.
+    # The subtask requested '192.168.0.10', so we'll use that.
+    socketio.run(app, host='192.168.0.10', port=5000, debug=True, use_reloader=False)
