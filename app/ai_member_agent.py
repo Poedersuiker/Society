@@ -2,119 +2,151 @@ import json
 import datetime
 import os
 import random
+# No longer need to import json or os if not using JSON files directly
 
 class AIMemberAgent:
-    def __init__(self, username, political_view, persona=None):
+    def __init__(self, username, political_view, persona=None, socketio_instance=None, db_module=None):
         self.username = username
         self.political_view = political_view
         self.persona = persona if persona else "A political representative."
-        self.MESSAGES_FILE = 'data/messages.json' # Default, can be overridden
-        self.speak_probability = 0.2 # Chance to speak after a relevant message
-        self.keywords = self._extract_keywords(political_view)
+        self.socketio = socketio_instance
+        self.db = db_module # Store the database module instance
+        
+        self.base_speak_probability = 0.1  # Lower base probability
+        self.triggered_speak_probability = 0.6 # Higher probability if triggered by keyword
+        
+        self.interest_keywords = self._extract_interest_keywords()
+        self.common_stopwords = {"the", "is", "a", "an", "and", "or", "but", "to", "of", "in", "on", "it", "this", "that", "we", "they", "i", "you", "me", "my", "he", "she", "him", "her", "has", "have", "do", "does", "not", "be", "are", "was", "were", "for", "with", "as", "if", "then", "at", "by"}
 
-    def _extract_keywords(self, view):
-        # Simple keyword extraction (can be improved)
-        # Takes words longer than 5 chars, not common words
-        common_words = {"advocates", "focuses", "prioritizes", "social", "strong", "reduced", "government", "market", "values", "protection", "often", "general", "stance", "describing", "their", "related", "consider", "think", "should"}
-        words = view.lower().replace('.', '').replace(',', '').split()
-        return [word for word in words if len(word) > 5 and word not in common_words]
 
+    def _extract_interest_keywords(self):
+        # Extract significant words from political_view and persona
+        raw_keywords = (self.political_view + " " + self.persona).lower().replace('.', '').replace(',', '').split()
+        
+        # More refined list of stopwords specific to political discourse or common in descriptions
+        discourse_stopwords = {
+            "advocates", "focuses", "prioritizes", "government", "policy", "impact", "issues",
+            "social", "strong", "reduced", "market", "values", "protection", "often", "general",
+            "stance", "describing", "their", "related", "consider", "think", "should", "believe",
+            "perspective", "approach", "system", "development", "economic", "national", "public",
+            "support", "rights", "freedom", "justice", "equality", "community", "growth", "well-being"
+        }
+        combined_stopwords = self.common_stopwords.union(discourse_stopwords)
+
+        # Keep words longer than 3 characters and not in combined_stopwords
+        interest_keywords = [word for word in raw_keywords if len(word) > 3 and word not in combined_stopwords]
+        # print(f"Agent {self.username} interest keywords: {list(set(interest_keywords))}")
+        return list(set(interest_keywords))
+
+    def _extract_message_keywords(self, message_text):
+        words = message_text.lower().replace('.', '').replace(',', '').split()
+        return [word for word in words if word not in self.common_stopwords and len(word) > 3]
 
     def generate_response(self, all_messages):
-        """
-        Generates a response based on message history and political view.
-        Simple initial logic: randomly decides to speak, formulates a simple message.
-        """
         if not all_messages:
             return None
 
-        # Only respond to messages not from other AI agents (including self) or ModeratorBot
         last_message = all_messages[-1]
-        # We need a list of AI usernames to check against. For now, hardcode common AI prefixes.
-        # This should ideally be passed or managed centrally.
-        ai_prefixes_to_ignore = ("AI_", "ModeratorBot")
-        if last_message['sender'].startswith(ai_prefixes_to_ignore):
-            return None # Don't respond to other AI messages
+        # In generate_response, last_message structure will depend on how it's passed.
+        # Assuming it's a dict from db.get_all_messages() which now aligns with db columns.
+        last_message_sender = last_message.get('sender_username', '')
+        last_message_text = last_message.get('text', '')
 
-        if random.random() < self.speak_probability:
-            if self.keywords:
-                keyword = random.choice(self.keywords)
-                possible_phrases = [
-                    f"Considering our stance on {keyword}, we should analyze this further.",
-                    f"The principle of {keyword} is very relevant here.",
-                    f"Let's not forget the importance of {keyword} in this discussion.",
-                    f"I believe {keyword} should be a key factor in our decision.",
-                    f"From my perspective, {keyword} is paramount."
-                ]
-                return random.choice(possible_phrases)
-            else:
-                # Fallback if no keywords extracted
-                return f"I am reflecting on this from the perspective of: {self.political_view}"
+        # Do not respond to self, ModeratorBot, or other AI agents
+        if last_message_sender == self.username or \
+           last_message_sender == "ModeratorBot" or \
+           (last_message_sender and last_message_sender.startswith("AI_")): # Added check for None
+            return None
+
+        message_keywords = self._extract_message_keywords(last_message_text)
+        matched_keywords = [kw for kw in self.interest_keywords if kw in message_keywords]
+
+        current_speak_probability = self.base_speak_probability
+        if matched_keywords:
+            current_speak_probability = self.triggered_speak_probability
+            print(f"Agent {self.username} triggered by keywords: {matched_keywords} in message: '{last_message_text}'")
+
+
+        if random.random() < current_speak_probability:
+            topic_keyword = random.choice(matched_keywords) if matched_keywords else random.choice(self.interest_keywords) if self.interest_keywords else "the current topic"
+            
+            # Simple way to get a snippet of the political view for responses
+            view_snippet_words = [w for w in self.political_view.lower().split() if w not in self.common_stopwords and len(w) > 4]
+            view_snippet = " ".join(random.sample(view_snippet_words, min(len(view_snippet_words), 3))) if view_snippet_words else "our core principles"
+
+
+            response_templates = [
+                f"Regarding '{topic_keyword}', my perspective is that we should focus on {view_snippet}.",
+                f"The recent point about '{topic_keyword}' aligns with my view on {random.choice(self.interest_keywords) if self.interest_keywords else view_snippet}.",
+                f"I'd like to add that {self.persona.split('.')[0]}, especially concerning '{topic_keyword}'.",
+                f"Considering '{topic_keyword}', it's crucial to remember our commitment to {view_snippet}.",
+                f"This discussion on '{topic_keyword}' directly relates to {random.choice(self.interest_keywords) if self.interest_keywords else 'our broader agenda'}. We must ensure {view_snippet}."
+            ]
+            
+            if not self.interest_keywords and not matched_keywords: # Fallback if no keywords at all
+                 return f"I am reflecting on the discussion. {self.persona.split('.')[0]}."
+
+            return random.choice(response_templates)
+            
         return None
 
-    def send_message(self, recipient, text, messages_file=None):
-        """Allows the AI member to send messages to the chat."""
-        if messages_file is None:
-            messages_file = self.MESSAGES_FILE
-        
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        new_message = {
-            "sender": self.username,
-            "recipient": recipient,
-            "text": text,
-            "timestamp": timestamp
-        }
+    def send_message(self, recipient, text): # Removed messages_file argument
+        """Allows the AI member to send messages to the chat, save to DB, and emit via SocketIO."""
+        if not self.db:
+            print(f"AIMemberAgent ({self.username}) Error: Database module not configured.")
+            return
 
-        messages = self._load_messages(messages_file)
-        messages.append(new_message)
-        self._save_messages(messages, messages_file)
-        print(f"AIMemberAgent ({self.username}): Message sent to {recipient}: '{text}'")
+        timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    def _load_messages(self, messages_file):
-        if not os.path.exists(messages_file):
-            with open(messages_file, 'w') as f:
-                json.dump([], f)
-            return []
-        try:
-            with open(messages_file, 'r') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, FileNotFoundError):
-            return []
+        if self.db.add_message(self.username, recipient, text, timestamp_str):
+            print(f"AIMemberAgent ({self.username}): Message to {recipient} saved to DB.")
+            
+            emitted_message = {
+                "sender_username": self.username,
+                "recipient_username": recipient,
+                "text": text,
+                "timestamp": timestamp_str
+            }
+            if self.socketio:
+                self.socketio.emit('new_message', emitted_message, broadcast=True)
+                print(f"AIMemberAgent ({self.username}): Message emitted via SocketIO to {recipient}: '{text}'")
+            else:
+                print(f"AIMemberAgent ({self.username}): SocketIO instance not available. Message not emitted.")
+        else:
+            print(f"AIMemberAgent ({self.username}): Failed to save message to {recipient} to DB.")
 
-    def _save_messages(self, messages, messages_file):
-        with open(messages_file, 'w') as f:
-            json.dump(messages, f, indent=4)
+    # Removed _load_messages and _save_messages as they are no longer needed
 
 if __name__ == '__main__':
     # Example Usage (for testing AIMemberAgent independently)
-    ai_def1 = {
-        "username": "AI_Test_Eco",
-        "political_view": "Advocates for strong environmental regulations and social ownership of key industries.",
-        "persona": "Speaks formally, often citing ecological data and social justice principles."
-    }
-    agent1 = AIMemberAgent(**ai_def1)
-
-    # Simulate a message history
-    sample_messages = [
-        {"sender": "user1", "recipient": "general", "text": "I think we need more parks.", "timestamp": "2023-01-01 10:00:00"},
-        {"sender": "user2", "recipient": "general", "text": "What about the budget for that?", "timestamp": "2023-01-01 10:01:00"}
-    ]
+    # Note: For direct testing of send_message with SocketIO and DB, 
+    # mock socketio and db_module objects would be needed.
     
-    response = agent1.generate_response(sample_messages)
-    if response:
-        print(f"Agent {agent1.username} generated response: {response}")
-        # agent1.send_message("general", response) # Uncomment to test file writing
-    else:
-        print(f"Agent {agent1.username} chose not to respond.")
+    # Basic instantiation test
+    # agent = AIMemberAgent("AI_Test", "Neutral", "Test Persona")
+    # print(f"Agent initialized with username: {agent.username}")
 
-    # Test with a message from another AI (should not respond)
-    sample_messages_from_ai = [
-        {"sender": "AI_Another_Bot", "recipient": "general", "text": "I agree with more parks.", "timestamp": "2023-01-01 10:02:00"}
-    ]
-    response_to_ai = agent1.generate_response(sample_messages_from_ai)
-    if response_to_ai:
-        print(f"Agent {agent1.username} generated response to AI: {response_to_ai} (ERROR: Should not respond)")
-    else:
-        print(f"Agent {agent1.username} correctly chose not to respond to another AI.")
+    # Example of how generate_response might be tested (needs mock db and socketio)
+    # class MockDB:
+    #     def add_message(self, s, r, t, ts): return True
+    # class MockSocketIO:
+    #     def emit(self, event, data, broadcast): pass
         
-    print("AIMemberAgent basic test complete.")
+    # agent_with_mocks = AIMemberAgent(
+    #     "AI_Test_Eco", 
+    #     "Advocates for strong environmental regulations and social ownership of key industries.",
+    #     persona="Speaks formally, often citing ecological data and social justice principles.",
+    #     socketio_instance=MockSocketIO(), 
+    #     db_module=MockDB()
+    # )
+    # sample_messages_db_format = [
+    #     {"sender_username": "user1", "recipient_username": "general", "text": "I think we need more parks and environmental focus.", "timestamp": "2023-01-01 10:00:00"},
+    #     {"sender_username": "user2", "recipient_username": "general", "text": "What about the budget for that?", "timestamp": "2023-01-01 10:01:00"}
+    # ]
+    # response = agent_with_mocks.generate_response(sample_messages_db_format)
+    # if response:
+    #     print(f"Agent {agent_with_mocks.username} generated response: {response}")
+    # else:
+    #     print(f"Agent {agent_with_mocks.username} chose not to respond.")
+        
+    print("AIMemberAgent basic structure test complete. For full test, run the Flask app.")

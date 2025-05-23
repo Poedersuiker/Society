@@ -3,17 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register</title>
+    <title>Register - Chat App</title>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h2>Register</h2>
-    <form method="post">
-        <label for="username">Username:</label><br>
-        <input type="text" id="username" name="username" required><br>
-        <label for="password">Password:</label><br>
-        <input type="password" id="password" name="password" required><br><br>
-        <input type="submit" value="Register">
-    </form>
-    <p>Already have an account? <a href="{{ url_for('login') }}">Login here</a></p>
+    <div class="auth-container">
+        <h2>Register</h2>
+
+        <div id="server_error_display" class="error-message" style="display: none;"></div>
+        {% if error %}
+            <p class="error-message">{{ error }}</p>
+        {% endif %}
+
+        <form method="post" id="register_form">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required>
+                <small class="field-error" style="display:none; color:red;"></small>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+                <small class="field-error" style="display:none; color:red;"></small>
+            </div>
+            <input type="submit" value="Register">
+        </form>
+        <p class="switch-auth">
+            Already have an account? <a href="{{ url_for('login') }}">Login here</a>
+        </p>
+    </div>
+    <script>
+        document.getElementById('register_form').addEventListener('submit', function(event) {
+            let isValid = true;
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+            
+            // Clear previous errors
+            document.querySelectorAll('.field-error').forEach(el => el.style.display = 'none');
+            document.getElementById('server_error_display').style.display = 'none';
+
+            // Username validation
+            const usernameValue = usernameInput.value.trim();
+            if (!usernameValue) {
+                displayFieldError(usernameInput, 'Username is required.');
+                isValid = false;
+            } else if (usernameValue.length < 3 || usernameValue.length > 20) {
+                displayFieldError(usernameInput, 'Username must be between 3 and 20 characters.');
+                isValid = false;
+            } else if (!/^\w+$/.test(usernameValue)) { // \w is alphanumeric + underscore
+                displayFieldError(usernameInput, 'Username can only contain letters, numbers, and underscores.');
+                isValid = false;
+            }
+            
+            // Password validation
+            const passwordValue = passwordInput.value;
+            if (!passwordValue) {
+                displayFieldError(passwordInput, 'Password is required.');
+                isValid = false;
+            } else if (passwordValue.length < 6) {
+                displayFieldError(passwordInput, 'Password must be at least 6 characters long.');
+                isValid = false;
+            }
+
+            if (!isValid) {
+                event.preventDefault(); // Stop form submission
+            }
+        });
+
+        function displayFieldError(inputElement, message) {
+            const errorElement = inputElement.nextElementSibling; // Assuming <small> is next
+            if (errorElement && errorElement.classList.contains('field-error')) {
+                errorElement.textContent = message;
+                errorElement.style.display = 'block';
+            }
+        }
+    </script>
 </body>
 </html>

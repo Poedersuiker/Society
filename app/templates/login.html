@@ -3,17 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
+    <title>Login - Chat App</title>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h2>Login</h2>
-    <form method="post">
-        <label for="username">Username:</label><br>
-        <input type="text" id="username" name="username" required><br>
-        <label for="password">Password:</label><br>
-        <input type="password" id="password" name="password" required><br><br>
-        <input type="submit" value="Login">
-    </form>
-    <p>Don't have an account? <a href="{{ url_for('register') }}">Register here</a></p>
+    <div class="auth-container">
+        <h2>Login</h2>
+        
+        <div id="server_error_display" class="error-message" style="display: none;"></div>
+        {% if error %}
+            <p class="error-message">{{ error }}</p>
+        {% endif %}
+
+        <form method="post" id="login_form">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required>
+                <small class="field-error" style="display:none; color:red;"></small>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+                <small class="field-error" style="display:none; color:red;"></small>
+            </div>
+            <input type="submit" value="Login">
+        </form>
+        <p class="switch-auth">
+            Don't have an account? <a href="{{ url_for('register') }}">Register here</a>
+        </p>
+    </div>
+
+    <script>
+        document.getElementById('login_form').addEventListener('submit', function(event) {
+            let isValid = true;
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+            
+            // Clear previous errors
+            document.querySelectorAll('.field-error').forEach(el => el.style.display = 'none');
+            document.getElementById('server_error_display').style.display = 'none';
+
+            if (!usernameInput.value.trim()) {
+                displayFieldError(usernameInput, 'Username is required.');
+                isValid = false;
+            }
+            
+            if (!passwordInput.value) {
+                displayFieldError(passwordInput, 'Password is required.');
+                isValid = false;
+            }
+
+            if (!isValid) {
+                event.preventDefault(); // Stop form submission
+            }
+        });
+
+        function displayFieldError(inputElement, message) {
+            const errorElement = inputElement.nextElementSibling; // Assuming <small> is next
+            if (errorElement && errorElement.classList.contains('field-error')) {
+                errorElement.textContent = message;
+                errorElement.style.display = 'block';
+            }
+        }
+    </script>
 </body>
 </html>

@@ -1,133 +1,333 @@
+/* Global Resets and Font */
 body {
-    font-family: sans-serif;
+    font-family: 'Lato', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     margin: 0;
-    background-color: #f4f4f4;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    background-color: #f8f9fa; /* Lighter overall background */
+    color: #333;
+    display: flex; /* For centering auth pages */
+    flex-direction: column;
     min-height: 100vh;
 }
 
-.chat-container {
-    width: 90%;
-    max-width: 800px;
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 500;
+}
+
+a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* Authentication Page Styling (Login/Register) */
+.auth-container {
+    width: 100%;
+    max-width: 400px;
+    margin: 40px auto;
+    padding: 25px 30px;
     background-color: #fff;
     border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.auth-container h2 {
+    text-align: center;
+    margin-bottom: 25px;
+    color: #333;
+}
+
+.auth-container .form-group {
+    margin-bottom: 20px;
+}
+
+.auth-container label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #555;
+}
+
+.auth-container input[type="text"],
+.auth-container input[type="password"] {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    box-sizing: border-box;
+    font-size: 1rem;
+}
+
+.auth-container input[type="submit"],
+.auth-container button { /* For consistency if using button tag */
+    width: 100%;
+    padding: 12px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: background-color 0.2s ease;
+}
+
+.auth-container input[type="submit"]:hover,
+.auth-container button:hover {
+    background-color: #0056b3;
+}
+
+.auth-container .error-message {
+    color: #dc3545;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.auth-container .switch-auth {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 0.9rem;
+}
+
+
+/* Chat Application Styling */
+.chat-container {
     display: flex;
     flex-direction: column;
-    height: 90vh; /* Limit height to allow scrolling within container */
+    height: 100vh; /* Full viewport height */
+    width: 100%; /* Full width */
+    max-width: 100%; /* Override previous max-width for full screen */
+    margin: 0 auto;
+    background-color: #fff;
+    border-radius: 0; /* No border radius for full screen */
+    box-shadow: none; /* No box shadow for full screen */
 }
 
 .chat-header {
-    padding: 15px;
+    padding: 12px 20px;
     background-color: #007bff;
     color: white;
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    z-index: 1000; /* Keep header on top */
 }
 
 .chat-header h2 {
     margin: 0;
-    font-size: 1.2em;
+    font-size: 1.25rem;
+    font-weight: 500;
 }
 
 .chat-header a {
     color: white;
-    text-decoration: none;
-    padding: 5px 10px;
+    padding: 8px 12px;
     border: 1px solid white;
-    border-radius: 4px;
+    border-radius: 5px;
+    transition: background-color 0.2s, color 0.2s;
 }
 
 .chat-header a:hover {
     background-color: white;
     color: #007bff;
+    text-decoration: none;
 }
 
 .message-display-area {
-    flex-grow: 1;
-    padding: 15px;
-    overflow-y: auto;
-    border-bottom: 1px solid #eee;
+    flex-grow: 1; /* Takes up available vertical space */
+    padding: 20px;
+    overflow-y: auto; /* Scrollbar for messages */
+    background-color: #f8f9fa; /* Light background for message area */
+    display: flex;
+    flex-direction: column; /* Stack messages vertically */
 }
 
 .message {
-    margin-bottom: 10px;
-    padding: 8px 12px;
-    border-radius: 6px;
-    background-color: #e9e9e9;
+    padding: 10px 15px;
+    border-radius: 18px; /* More bubble-like */
+    margin-bottom: 12px;
+    max-width: 70%;
     word-wrap: break-word;
+    line-height: 1.4;
+}
+
+.message.current-user {
+    background-color: #007bff; /* Primary blue for current user */
+    color: white;
+    align-self: flex-end; /* Right align */
+    border-bottom-right-radius: 6px; /* Slight variation for "tail" effect */
+}
+
+.message:not(.current-user) {
+    background-color: #e9ecef; /* Gray for other users */
+    color: #333;
+    align-self: flex-start; /* Left align */
+    border-bottom-left-radius: 6px;
 }
 
 .message .sender {
-    font-weight: bold;
-    margin-right: 5px;
-    color: #333;
+    font-weight: 600; /* Bolder sender name */
+    font-size: 0.85rem;
+    display: block;
+    margin-bottom: 4px;
+    /* Color is inherited from .message or .message.current-user */
+}
+.message:not(.current-user) .sender {
+    color: #007bff; /* Or a distinct color for sender name */
 }
 
+
 .message .content {
-    color: #555;
+    font-size: 1rem;
 }
 
 .message .timestamp {
-    font-size: 0.8em;
-    color: #777;
-    display: block; /* Or inline-block and float right */
-    margin-top: 3px;
-    text-align: right;
+    font-size: 0.75rem; /* Smaller timestamp */
+    display: block;
+    margin-top: 5px;
+    text-align: right; /* Timestamp to the right within the bubble */
+    opacity: 0.8;
+}
+.message.current-user .timestamp {
+    color: #e0e0e0;
+}
+.message:not(.current-user) .timestamp {
+    color: #6c757d;
 }
 
-/* Example of styling for messages from the current user (optional) */
-.message.current-user {
-    background-color: #d1e7ff; /* Light blue for current user */
-    align-self: flex-end; /* If using flexbox for message alignment */
-}
 
 .recipient-selection {
     padding: 10px 15px;
-    border-bottom: 1px solid #eee;
+    border-top: 1px solid #dee2e6; /* Separator line */
+    background-color: #fff;
+    display: flex;
+    flex-wrap: wrap; /* Allow wrapping on small screens */
+    align-items: center;
+    gap: 10px; /* Spacing between radio and input */
+}
+
+.recipient-selection > div { /* Target direct div children for radio groups */
     display: flex;
     align-items: center;
+    margin-right: 15px;
 }
 
-.recipient-selection label {
-    margin-right: 10px;
+.recipient-selection label { /* For radio labels */
+    margin-left: 5px;
+    font-size: 0.9rem;
 }
 
-.recipient-selection input[type="text"],
-.recipient-selection select {
-    padding: 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+.recipient-selection input[type="text"] {
+    padding: 10px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    flex-grow: 1; /* Take available space */
+    font-size: 0.9rem;
+}
+
+#private_recipient_div {
+    display: flex; /* Align label and input */
+    align-items: center;
     flex-grow: 1;
 }
+#private_recipient_div label {
+    margin-right: 8px;
+    white-space: nowrap;
+}
+
 
 .message-input-area {
-    padding: 15px;
     display: flex;
+    padding: 15px;
+    background-color: #fff;
+    border-top: 1px solid #dee2e6; /* Separator line */
 }
 
-.message-input-area #message_input {
+.message-input-area #message_text {
     flex-grow: 1;
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+    padding: 12px;
+    border: 1px solid #ced4da;
+    border-radius: 20px; /* Rounded input field */
     margin-right: 10px;
+    font-size: 1rem;
 }
 
 .message-input-area button {
-    padding: 10px 15px;
+    padding: 12px 20px;
     background-color: #007bff;
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 20px; /* Rounded button */
     cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: background-color 0.2s ease;
 }
 
 .message-input-area button:hover {
     background-color: #0056b3;
+}
+
+#no_messages_placeholder {
+    text-align: center;
+    color: #6c757d;
+    margin: auto; /* Center vertically and horizontally if it's the only thing */
+    font-size: 1rem;
+}
+
+
+/* Basic Responsiveness */
+@media (max-width: 768px) {
+    .chat-container {
+        /* No change needed if already full width/height */
+    }
+    .message {
+        max-width: 85%; /* Allow messages to be a bit wider on small screens */
+    }
+    .chat-header h2 {
+        font-size: 1.1rem;
+    }
+    .chat-header a {
+        padding: 6px 10px;
+        font-size: 0.9rem;
+    }
+    .message-input-area #message_text,
+    .message-input-area button {
+        padding: 10px 15px;
+        font-size: 0.95rem;
+    }
+    .recipient-selection {
+        padding: 8px 10px;
+    }
+    .recipient-selection input[type="text"] {
+        padding: 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    .auth-container {
+        margin: 20px auto;
+        padding: 20px;
+    }
+    .message-display-area {
+        padding: 15px;
+    }
+    .message {
+        max-width: 90%;
+        font-size: 0.95rem; /* Slightly smaller text in messages */
+    }
+    .message .sender, .message .timestamp {
+        font-size: 0.7rem;
+    }
+    .recipient-selection {
+        flex-direction: column; /* Stack recipient options */
+        align-items: flex-start;
+    }
+    #private_recipient_div {
+        width: 100%; /* Make private input full width when stacked */
+        margin-top: 10px !important;
+    }
 }

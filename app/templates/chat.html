@@ -3,39 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat</title>
+    <title>Chat - General Assembly</title>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.js" integrity="sha512-CPDRwTNEpbwasrL3L2O8L2fGf1Qj3BvH4Vj3nL/K+Jg3RGu+4qEaR_j8_T7V_O/2hJqF6Cj/J/WClqGnbMGDfQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
     <div class="chat-container">
-        <div class="chat-header">
-            <h2>Welcome, {{ username }}!</h2>
+        <header class="chat-header">
+            <h2>Welcome, <span id="current_username">{{ username }}</span>!</h2>
             <a href="{{ url_for('logout') }}">Logout</a>
-        </div>
+        </header>
 
-        <div id="message_display_area" class="message-display-area">
+        <main id="message_display_area" class="message-display-area">
             {% if messages %}
                 {% for msg in messages %}
-                    <div class="message {% if msg.sender == username %}current-user{% endif %}">
+                    <div class="message {% if msg.sender_username == username %}current-user{% endif %}">
                         <span class="sender">
-                            {{ msg.sender }}
-                            {% if msg.recipient != 'general' and msg.recipient != username %}
-                                (to {{ msg.recipient }})
-                            {% elif msg.recipient != 'general' and msg.sender != username %}
-                                (private from {{ msg.sender }})
+                            {{ msg.sender_username }}
+                            {% if msg.recipient_username != 'general' and msg.recipient_username != username %}
+                                (to {{ msg.recipient_username }})
+                            {% elif msg.recipient_username != 'general' and msg.sender_username != username %}
+                                (private from {{ msg.sender_username }})
                             {% endif %}:
                         </span>
                         <span class="content">{{ msg.text }}</span>
-                        <span class="timestamp">{{ msg.timestamp }}</span>
+                        <span class="timestamp">{{ msg.timestamp.split('.')[0] }}</span> {# Assuming timestamp might have millisec #}
                     </div>
                 {% endfor %}
             {% else %}
-                <p>No messages yet. Start a conversation!</p>
+                <p id="no_messages_placeholder">No messages yet. Start a conversation!</p>
             {% endif %}
-        </div>
+        </main>
+        
+        <div id="chat_error_display" class="error-message" style="display: none; padding: 10px; margin: 0 15px; border-radius: 5px; background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;"></div>
 
-        <div class="message-input-area">
-            <form id="message_form" method="POST" action="{{ url_for('send_message') }}">
+        <footer class="message-input-area">
+            <form id="message_form"> 
                 <div class="recipient-selection">
                     <div>
                         <input type="radio" id="recipient_general" name="recipient_type" value="general" checked>
@@ -45,41 +49,188 @@
                         <input type="radio" id="recipient_private" name="recipient_type" value="private">
                         <label for="recipient_private">Private Message</label>
                     </div>
-                    <div id="private_recipient_div" style="display: none; margin-top: 5px;">
+                    <div id="private_recipient_div" style="display: none;">
                         <label for="private_recipient_username">To:</label>
-                        <input type="text" id="private_recipient_username" name="private_recipient_username" placeholder="Enter username">
+                        <input type="text" id="private_recipient_username" name="private_recipient_username" placeholder="Username">
                     </div>
                 </div>
-                <input type="text" id="message_text" name="message_text" placeholder="Type your message..." required>
+                <input type="text" id="message_text" name="message_text" placeholder="Type your message..." required autocomplete="off">
+                <small id="message_text_error" class="field-error" style="display:none; color:red; width:100%; text-align:left; margin-left: 5px; margin-bottom: 5px;"></small>
+                <small id="private_recipient_error" class="field-error" style="display:none; color:red; width:100%; text-align:left; margin-left: 5px; margin-bottom: 5px;"></small>
                 <button type="submit">Send</button>
             </form>
-        </div>
+        </footer>
     </div>
 
     <script>
-        const recipientGeneral = document.getElementById('recipient_general');
-        const recipientPrivate = document.getElementById('recipient_private');
-        const privateRecipientDiv = document.getElementById('private_recipient_div');
-        const privateRecipientInput = document.getElementById('private_recipient_username');
+        document.addEventListener('DOMContentLoaded', (event) => {
+            var socket = io(); 
+            const messageDisplayArea = document.getElementById('message_display_area');
+            const currentUsername = document.getElementById('current_username').textContent;
+            const chatErrorDisplay = document.getElementById('chat_error_display');
+            const messageTextError = document.getElementById('message_text_error');
+            const privateRecipientError = document.getElementById('private_recipient_error');
 
-        recipientGeneral.addEventListener('change', function() {
-            if (this.checked) {
-                privateRecipientDiv.style.display = 'none';
-                privateRecipientInput.required = false;
+
+            function clearChatErrors() {
+                chatErrorDisplay.textContent = '';
+                chatErrorDisplay.style.display = 'none';
+                messageTextError.style.display = 'none';
+                messageTextError.textContent = '';
+                privateRecipientError.style.display = 'none';
+                privateRecipientError.textContent = '';
             }
-        });
 
-        recipientPrivate.addEventListener('change', function() {
-            if (this.checked) {
-                privateRecipientDiv.style.display = 'block';
-                privateRecipientInput.required = true;
-                privateRecipientInput.focus();
+            socket.on('connect', function() {
+                console.log('Connected to SocketIO server!');
+                clearChatErrors();
+            });
+            
+            socket.on('disconnect', function() {
+                console.log('Disconnected from SocketIO server.');
+                displayGlobalChatError('Disconnected from server. Attempting to reconnect...');
+                // Socket.IO client usually attempts to reconnect automatically.
+            });
+
+
+            function displayGlobalChatError(message) {
+                chatErrorDisplay.textContent = message;
+                chatErrorDisplay.style.display = 'block';
             }
-        });
+            
+            function displayFieldError(fieldId, message) {
+                const errorEl = document.getElementById(fieldId + "_error");
+                if(errorEl) {
+                    errorEl.textContent = message;
+                    errorEl.style.display = 'block';
+                } else { // Fallback to global error display
+                    displayGlobalChatError(message);
+                }
+            }
 
-        // Scroll message display to the bottom
-        const messageDisplayArea = document.getElementById('message_display_area');
-        messageDisplayArea.scrollTop = messageDisplayArea.scrollHeight;
+
+            function displayMessage(msg) {
+                const noMessagesPlaceholder = document.getElementById('no_messages_placeholder');
+                if (noMessagesPlaceholder) {
+                    noMessagesPlaceholder.remove();
+                }
+
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('message');
+                if (msg.sender_username === currentUsername) { 
+                    messageDiv.classList.add('current-user');
+                }
+
+                let senderDisplay = msg.sender_username; 
+                if (msg.recipient_username !== 'general' && msg.recipient_username !== currentUsername) {
+                    senderDisplay += ` (to ${msg.recipient_username})`;
+                } else if (msg.recipient_username !== 'general' && msg.sender_username !== currentUsername) {
+                    senderDisplay += ` (private from ${msg.sender_username})`;
+                }
+                senderDisplay += ':';
+                
+                const senderSpan = document.createElement('span');
+                senderSpan.className = 'sender';
+                senderSpan.textContent = senderDisplay;
+
+                const contentSpan = document.createElement('span');
+                contentSpan.className = 'content';
+                contentSpan.textContent = msg.text;
+                
+                const timestampSpan = document.createElement('span');
+                timestampSpan.className = 'timestamp';
+                timestampSpan.textContent = msg.timestamp.split('.')[0]; 
+
+                messageDiv.appendChild(senderSpan);
+                messageDiv.appendChild(contentSpan);
+                messageDiv.appendChild(timestampSpan);
+                
+                messageDisplayArea.appendChild(messageDiv);
+                messageDisplayArea.scrollTop = messageDisplayArea.scrollHeight;
+            }
+
+            socket.on('new_message', function(msg) {
+                clearChatErrors(); // Clear errors on new valid message
+                if (msg.recipient_username === 'general' || msg.sender_username === currentUsername || msg.recipient_username === currentUsername) {
+                    displayMessage(msg);
+                }
+            });
+
+            socket.on('message_validation_error', function(error) {
+                console.error('Validation Error:', error.field, error.message);
+                if (error.field === 'message_text') {
+                    displayFieldError('message_text', error.message);
+                } else if (error.field === 'private_recipient_username') {
+                     displayFieldError('private_recipient', error.message);
+                } else {
+                    displayGlobalChatError(error.message);
+                }
+            });
+
+            socket.on('message_error', function(error) {
+                console.error('Server Message Error:', error.message);
+                displayGlobalChatError(error.message);
+            });
+            
+            const messageForm = document.getElementById('message_form');
+            const messageTextInput = document.getElementById('message_text');
+            const recipientGeneralRadio = document.getElementById('recipient_general');
+            const recipientPrivateRadio = document.getElementById('recipient_private');
+            const privateRecipientUsernameInput = document.getElementById('private_recipient_username');
+
+            messageForm.addEventListener('submit', function(e) {
+                e.preventDefault(); 
+                clearChatErrors();
+                let isValid = true;
+
+                const messageText = messageTextInput.value.trim();
+                if (!messageText) {
+                    displayFieldError('message_text', 'Message text cannot be empty.');
+                    isValid = false;
+                } else if (messageText.length > 5000) {
+                    displayFieldError('message_text', 'Message is too long (max 5000 characters).');
+                    isValid = false;
+                }
+
+                const recipientType = recipientGeneralRadio.checked ? 'general' : 'private';
+                const privateRecipientUsername = privateRecipientUsernameInput.value.trim();
+
+                if (recipientType === 'private' && !privateRecipientUsername) {
+                    displayFieldError('private_recipient', 'Recipient username is required for private messages.');
+                    isValid = false;
+                }
+                
+                if (!isValid) return;
+                
+                socket.emit('send_chat_message', {
+                    message_text: messageText,
+                    recipient_type: recipientType,
+                    private_recipient_username: privateRecipientUsername
+                });
+                messageTextInput.value = '';
+                // privateRecipientUsernameInput.value = ''; // Keep for convenience if sending multiple private messages
+            });
+
+            // Recipient selection UI logic (same as before)
+            const privateRecipientDiv = document.getElementById('private_recipient_div');
+            
+            recipientGeneralRadio.addEventListener('change', function() {
+                if (this.checked) {
+                    privateRecipientDiv.style.display = 'none';
+                    privateRecipientUsernameInput.required = false;
+                }
+            });
+
+            recipientPrivateRadio.addEventListener('change', function() {
+                if (this.checked) {
+                    privateRecipientDiv.style.display = 'flex'; 
+                    privateRecipientUsernameInput.required = true;
+                    privateRecipientUsernameInput.focus();
+                }
+            });
+
+            messageDisplayArea.scrollTop = messageDisplayArea.scrollHeight;
+        });
     </script>
 </body>
 </html>

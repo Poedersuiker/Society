@@ -1,67 +1,99 @@
 import json
 import datetime
 import os
+# No longer need to import json if not using JSON files directly
 
 class ModeratorAI:
-    def __init__(self, username="ModeratorBot"):
+    def __init__(self, username="ModeratorBot", socketio_instance=None, db_module=None):
         self.ai_username = username
         self.rules = {}  # For now, empty
-        self.MESSAGES_FILE = 'data/messages.json' # Default, can be overridden
+        self.offensive_keywords = ["badword1", "offensive_term2", "example_curse", "hate_speech", "darn", "heck"] # Example offensive keywords
+        self.socketio = socketio_instance
+        self.db = db_module # Store the database module instance
 
-    def send_message(self, recipient, text, messages_file=None):
-        """Allows the AI to send messages to the chat."""
-        if messages_file is None:
-            messages_file = self.MESSAGES_FILE
+    def send_message(self, recipient, text): # Removed messages_file argument
+        """Allows the AI to send messages to the chat, save to DB, and emit via SocketIO."""
+        if not self.db:
+            print("ModeratorAI Error: Database module not configured.")
+            return
+
+        timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        new_message = {
-            "sender": self.ai_username,
-            "recipient": recipient,
-            "text": text,
-            "timestamp": timestamp
-        }
+        # Save message to database
+        if self.db.add_message(self.ai_username, recipient, text, timestamp_str):
+            print(f"ModeratorAI: Message from {self.ai_username} to {recipient} saved to DB.")
+            
+            # Construct message object for emitting (consistent with DB structure)
+            # It's important that this matches the structure client expects / app.py emits for user messages
+            emitted_message = {
+                "sender_username": self.ai_username,
+                "recipient_username": recipient,
+                "text": text,
+                "timestamp": timestamp_str
+            }
 
-        messages = self._load_messages(messages_file)
-        messages.append(new_message)
-        self._save_messages(messages, messages_file)
-        print(f"ModeratorAI: Message sent to {recipient}: '{text}'")
+            if self.socketio:
+                self.socketio.emit('new_message', emitted_message, broadcast=True)
+                print(f"ModeratorAI: Message emitted via SocketIO to {recipient}: '{text}'")
+            else:
+                print("ModeratorAI: SocketIO instance not available. Message not emitted.")
+        else:
+            print(f"ModeratorAI: Failed to save message from {self.ai_username} to {recipient} to DB.")
+
 
     def process_message(self, message_dict):
-        """Analyzes a message and reacts. Placeholder for now."""
-        # For now, just prints the message to the console
-        print(f"ModeratorAI: Processing message from {message_dict['sender']} to {message_dict['recipient']}: '{message_dict['text']}'")
-        # Future logic will go here, e.g., rule checking, responding, etc.
+        """Analyzes a message for offensive content and reacts."""
+        # Fields from message_dict should now align with DB column names (sender_username, recipient_username)
+        sender = message_dict.get('sender_username') 
+        text_content = message_dict.get('text', '').lower()
+        recipient = message_dict.get('recipient_username')
 
-    def _load_messages(self, messages_file):
-        if not os.path.exists(messages_file):
-            with open(messages_file, 'w') as f:
-                json.dump([], f)
-            return []
-        try:
-            with open(messages_file, 'r') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, FileNotFoundError):
-            return []
+        # Don't moderate own messages or messages from other AI agents
+        if sender == self.ai_username or (sender and sender.startswith("AI_")):
+            return
 
-    def _save_messages(self, messages, messages_file):
-        with open(messages_file, 'w') as f:
-            json.dump(messages, f, indent=4)
+        print(f"ModeratorAI: Processing message from {sender} to {recipient}: '{message_dict.get('text')}'")
+
+        found_offensive_keyword = None
+        for keyword in self.offensive_keywords:
+            if keyword.lower() in text_content:
+                found_offensive_keyword = keyword
+                break
+        
+        if found_offensive_keyword:
+            warning_text = (
+                f"ModeratorBot: @{sender}, your recent message contains inappropriate language (e.g., related to '{found_offensive_keyword}'). "
+                "Please maintain a respectful environment and avoid using offensive terms."
+            )
+            # Send warning to general chat, regardless of original message's recipient for public visibility of moderation
+            self.send_message("general", warning_text)
+            print(f"ModeratorAI: Offensive keyword '{found_offensive_keyword}' detected from {sender}. Warning sent.")
+        # Future: Implement other rules like "staying on topic" here.
+
+    # Removed _load_messages and _save_messages as they are no longer needed
 
 if __name__ == '__main__':
     # Example Usage (for testing ModeratorAI independently)
-    moderator = ModeratorAI()
+    # Note: For direct testing of send_message with SocketIO and DB, 
+    # mock socketio and db_module objects would be needed.
     
-    # Test sending a message
-    # moderator.send_message("general", "Hello everyone! This is ModeratorBot.")
-    # moderator.send_message("user123", "This is a private test message to user123.")
+    # Basic instantiation test
+    # moderator = ModeratorAI() 
+    # print(f"ModeratorAI initialized with username: {moderator.ai_username}")
 
-    # Test processing a message
-    sample_message = {
-        "sender": "user_test", 
-        "recipient": "general", 
-        "text": "This is a test message for the moderator to process.", 
-        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    # moderator.process_message(sample_message)
+    # Example of how process_message might be tested (needs mock db and socketio)
+    # class MockDB:
+    #     def add_message(self, s, r, t, ts): return True
+    # class MockSocketIO:
+    #     def emit(self, event, data, broadcast): pass
     
-    print("ModeratorAI basic test complete. Check data/messages.json if you ran send_message.")
+    # moderator_with_mocks = ModeratorAI(socketio_instance=MockSocketIO(), db_module=MockDB())
+    # sample_message = {
+    #     "sender_username": "user_test", 
+    #     "recipient_username": "general", 
+    #     "text": "This is a darn test message for the moderator to process.", 
+    #     "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # }
+    # moderator_with_mocks.process_message(sample_message)
+    
+    print("ModeratorAI basic structure test complete. For full test, run the Flask app.")
