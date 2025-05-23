@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h2>Welcome, {{ username }}!</h2>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+
+        <div id="message_display_area" class="message-display-area">
+            {% if messages %}
+                {% for msg in messages %}
+                    <div class="message {% if msg.sender == username %}current-user{% endif %}">
+                        <span class="sender">
+                            {{ msg.sender }}
+                            {% if msg.recipient != 'general' and msg.recipient != username %}
+                                (to {{ msg.recipient }})
+                            {% elif msg.recipient != 'general' and msg.sender != username %}
+                                (private from {{ msg.sender }})
+                            {% endif %}:
+                        </span>
+                        <span class="content">{{ msg.text }}</span>
+                        <span class="timestamp">{{ msg.timestamp }}</span>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>No messages yet. Start a conversation!</p>
+            {% endif %}
+        </div>
+
+        <div class="message-input-area">
+            <form id="message_form" method="POST" action="{{ url_for('send_message') }}">
+                <div class="recipient-selection">
+                    <div>
+                        <input type="radio" id="recipient_general" name="recipient_type" value="general" checked>
+                        <label for="recipient_general">General Assembly</label>
+                    </div>
+                    <div>
+                        <input type="radio" id="recipient_private" name="recipient_type" value="private">
+                        <label for="recipient_private">Private Message</label>
+                    </div>
+                    <div id="private_recipient_div" style="display: none; margin-top: 5px;">
+                        <label for="private_recipient_username">To:</label>
+                        <input type="text" id="private_recipient_username" name="private_recipient_username" placeholder="Enter username">
+                    </div>
+                </div>
+                <input type="text" id="message_text" name="message_text" placeholder="Type your message..." required>
+                <button type="submit">Send</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const recipientGeneral = document.getElementById('recipient_general');
+        const recipientPrivate = document.getElementById('recipient_private');
+        const privateRecipientDiv = document.getElementById('private_recipient_div');
+        const privateRecipientInput = document.getElementById('private_recipient_username');
+
+        recipientGeneral.addEventListener('change', function() {
+            if (this.checked) {
+                privateRecipientDiv.style.display = 'none';
+                privateRecipientInput.required = false;
+            }
+        });
+
+        recipientPrivate.addEventListener('change', function() {
+            if (this.checked) {
+                privateRecipientDiv.style.display = 'block';
+                privateRecipientInput.required = true;
+                privateRecipientInput.focus();
+            }
+        });
+
+        // Scroll message display to the bottom
+        const messageDisplayArea = document.getElementById('message_display_area');
+        messageDisplayArea.scrollTop = messageDisplayArea.scrollHeight;
+    </script>
+</body>
+</html>
